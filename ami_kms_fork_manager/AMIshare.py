@@ -15,15 +15,26 @@ limitations under the License.
 from __future__ import print_function
 
 import json
-import sys
 import time
 
 import boto3
 import botocore
 
+import argparse
+
+
+def parseArguments():
+    parser = argparse.ArgumentParser(description='AMI encryption')
+    parser.add_argument('--config', '-c', default='config.json', dest='configFile', required=False)
+    args = parser.parse_args()
+    return args
+
+
+args = parseArguments()
+
 # User must set path to the config file.
 
-CONFIG_PATH = 'config.json'
+CONFIG_PATH = args.configFile
 
 with open(CONFIG_PATH, 'r') as j:
     config_data = json.loads(j.read())
@@ -85,6 +96,7 @@ def create_subnet(function_ec2_cli, funct_vpc_id):
                 # Gives creating the subnet a little more time flexibility
                 if counter == 5:
                     function_ec2_cli.delete_vpc(VpcId=funct_vpc_id)
+                    print(subnetError)
                     raise
                 else:
                     counter += 1
@@ -130,6 +142,7 @@ def create_sg(function_ec2_cli, funct_vpc_id):
     # In case something goes wrong when creating a security group
     except botocore.exceptions.ClientError as SGerror:
         function_ec2_cli.delete_vpc(VpcId=funct_vpc_id)
+        print(SGerror)
         raise
 
 
@@ -156,7 +169,6 @@ def recreate_image(ami, function_ec2_cli, securitygroup_id, funct_subnet_id, fun
 
             function_ec2_cli.get_waiter('instance_running').wait(
                 InstanceIds=[temp_instance['Instances'][0]['InstanceId']])
-
 
             # Adds tags to all temporary resources such as for cost tracking purposes:
             for tag in config_data['Tags']:
@@ -222,9 +234,6 @@ def recreate_image(ami, function_ec2_cli, securitygroup_id, funct_subnet_id, fun
                                         'VPC': temp_sg_details['SecurityGroups'][0]['VpcId'],
                                         'Message': "Please check if all resources are deleted"})
 
-
-
-
             return new_image['ImageId']
 
         except botocore.exceptions.ClientError as CreateInstanceErr:
@@ -251,7 +260,6 @@ def recreate_image(ami, function_ec2_cli, securitygroup_id, funct_subnet_id, fun
                 else:
                     print("Something when wrong. Trying again...")
                     continue
-
 
         except botocore.exceptions.WaiterError:
             function_ec2_cli.terminate_instances(InstanceIds=[temp_instance['Instances'][0]['InstanceId']])
